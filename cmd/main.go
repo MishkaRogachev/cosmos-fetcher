@@ -34,21 +34,24 @@ func main() {
 
 	fmt.Printf("Connected to RPC endpoint url: %s\n", rpcURL)
 
+	// 3. Parse the sync info from the node status to get earliest and latest block heights
 	var syncInfo protocol.SyncInfo
 	syncInfoData, ok := status["result"].(map[string]interface{})["sync_info"].(map[string]interface{})
 	if !ok {
-		log.Fatalf("Error parsing sync_info from node status")
+		log.Fatalf("Error getting sync_info from node status")
 	}
 	if err := protocol.ParseSyncInfo(syncInfoData, &syncInfo); err != nil {
 		log.Fatalf("Error parsing sync_info: %v", err)
 	}
+	fmt.Printf("Block ranges: %v\n", syncInfo)
 
-	fmt.Printf("Sync Info: %v\n", syncInfo)
+	// 4. Fetch blocks
+	batchBlockFetcher := protocol.NewBatchBlockFetcher(
+		rpcClient, syncInfo.EarliestBlockHeight, syncInfo.LatestBlockHeight, 5,
+	)
+	blockChannel := batchBlockFetcher.StartFetchingBlocks()
 
-	blockFetcher := protocol.NewBlockFetcher(rpcClient)
-	block, err := blockFetcher.FetchBlock(syncInfo.EarliestBlockHeight)
-	if err != nil {
-		log.Fatalf("Error fetching block: %v", err)
+	for block := range blockChannel {
+		fmt.Printf("Fetched Block Height: %d\n", block.BlockHeight)
 	}
-	fmt.Println("Block Height:", block.BlockHeight)
 }

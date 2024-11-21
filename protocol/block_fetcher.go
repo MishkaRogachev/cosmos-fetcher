@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 )
 
 type Block struct {
@@ -41,7 +42,6 @@ func (bf *BlockFetcher) FetchBlock(height int64) (*Block, error) {
 		return nil, err
 	}
 
-	// Check if there's an error field in the response
 	if result.Error != nil {
 		return nil, fmt.Errorf("RPC error: %s", result.Error.Message)
 	}
@@ -49,8 +49,17 @@ func (bf *BlockFetcher) FetchBlock(height int64) (*Block, error) {
 	numTransactions := len(result.Result.Block.Data.Txs)
 	chainID := result.Result.Block.Header.ChainID
 
+	blockHeight, err := strconv.ParseInt(result.Result.Block.Header.Height, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse block height: %v", err)
+	}
+
+	if blockHeight != height {
+		return nil, fmt.Errorf("unexpected block height: %d", blockHeight)
+	}
+
 	return &Block{
-		BlockHeight:     height,
+		BlockHeight:     blockHeight,
 		NumTransactions: numTransactions,
 		ChainID:         chainID,
 	}, nil

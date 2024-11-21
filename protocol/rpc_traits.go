@@ -14,7 +14,13 @@ type RPCError struct {
 }
 
 type BlockResult struct {
-	Block BlockMeta `json:"block"`
+	BlockID BlockID   `json:"block_id"`
+	Block   BlockMeta `json:"block"`
+}
+
+type BlockID struct {
+	Hash  string    `json:"hash"`
+	Parts PartsMeta `json:"parts"`
 }
 
 type BlockMeta struct {
@@ -22,8 +28,15 @@ type BlockMeta struct {
 	Data   BlockData   `json:"data"`
 }
 
+type PartsMeta struct {
+	Total int    `json:"total"`
+	Hash  string `json:"hash"`
+}
+
 type BlockHeader struct {
 	ChainID string `json:"chain_id"`
+	Height  string `json:"height"`
+	Time    string `json:"time"`
 }
 
 type BlockData struct {
