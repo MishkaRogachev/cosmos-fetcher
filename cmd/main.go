@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/MishkaRogachev/cosmos-fetcher/persistence"
 	"github.com/MishkaRogachev/cosmos-fetcher/protocol"
 )
 
@@ -84,11 +85,15 @@ func main() {
 	}
 	fmt.Printf("Fetching blocks in range %d-%d using %d workers\n", startHeight, endHeight, config.NumWorkers)
 
-	// 5. Fetch blocks
+	// 5. Fetch & store blocks
 	batchBlockFetcher := protocol.NewBatchBlockFetcher(rpcClient, startHeight, endHeight, config.NumWorkers)
 	blockChannel := batchBlockFetcher.StartFetchingBlocks()
 
+	blockStore := persistence.NewBlockStore("blocks.json")
 	for block := range blockChannel {
-		fmt.Printf("Fetched Block Height: %d\n", block.BlockHeight)
+		fmt.Printf("Processing block: %d\n", block.BlockHeight)
+		if err := blockStore.SaveBlock(block); err != nil {
+			log.Printf("Error saving block: %v", err)
+		}
 	}
 }
