@@ -90,6 +90,8 @@ func main() {
 	blockChannel := batchBlockFetcher.StartFetchingBlocks()
 
 	blockStore := persistence.NewBlockStore("blocks.json")
+	defer blockStore.Close()
+
 	for block := range blockChannel {
 		fmt.Printf("Processing block: %d\n", block.BlockHeight)
 		if err := blockStore.SaveBlock(block); err != nil {
