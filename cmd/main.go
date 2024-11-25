@@ -87,15 +87,18 @@ func main() {
 
 	// 5. Fetch & store blocks
 	batchBlockFetcher := protocol.NewBatchBlockFetcher(rpcClient, startHeight, endHeight, config.NumWorkers)
-	blockChannel := batchBlockFetcher.StartFetchingBlocks()
+	batchBlockFetcher.StartFetchingBlocks()
+	defer batchBlockFetcher.StopFetchingBlocks()
 
 	blockStore := persistence.NewBlockStore("blocks.json")
 	defer blockStore.Close()
 
-	for block := range blockChannel {
-		fmt.Printf("Processing block: %d\n", block.BlockHeight)
-		if err := blockStore.SaveBlock(block); err != nil {
-			log.Printf("Error saving block: %v", err)
+	for batch := range batchBlockFetcher.BatchChannel {
+		for _, block := range batch.Blocks {
+			fmt.Printf("Fetched Block Height: %d\n", block.BlockHeight)
+			if err := blockStore.SaveBlock(block); err != nil {
+				log.Printf("Error saving block: %v", err)
+			}
 		}
 	}
 }
