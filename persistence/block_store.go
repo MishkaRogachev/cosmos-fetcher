@@ -2,61 +2,76 @@ package persistence
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
+	"path/filepath"
+	"sort"
 
 	"github.com/MishkaRogachev/cosmos-fetcher/protocol"
 )
 
+const BLOCKS_PER_FILE = 32
+
 type BlockStore struct {
-	file    *os.File
-	initial bool
+	blockDir string
+	blockMap map[string][]*protocol.Block
 }
 
-func NewBlockStore(filePath string) *BlockStore {
-	// Clear the file before starting to fetch blocks
-	file, err := os.Create(filePath)
-	if err != nil {
-		panic(err)
+func NewBlockStore(blockDir string) *BlockStore {
+	return &BlockStore{
+		blockDir: blockDir,
+		blockMap: make(map[string][]*protocol.Block),
 	}
-
-	// Write the opening bracket for a JSON array
-	_, err = file.WriteString("[\n\t")
-	if err != nil {
-		panic(err)
-	}
-
-	return &BlockStore{file: file, initial: true}
 }
 
-func (bs *BlockStore) SaveBlock(block *protocol.Block) error {
-	// Add a comma for all blocks except the first one
-	if bs.initial {
-		bs.initial = false
-	} else {
-		if _, err := bs.file.WriteString(",\n\t"); err != nil {
-			return err
+func (bs *BlockStore) SaveBlocks(blocks []*protocol.Block) error {
+	for _, block := range blocks {
+		fileName := bs.getFileNameForBlock(block.BlockHeight)
+		filePath := filepath.Join(bs.blockDir, fileName)
+
+		bs.blockMap[filePath] = append(bs.blockMap[filePath], block)
+
+		if len(bs.blockMap[filePath]) >= BLOCKS_PER_FILE {
+			if err := bs.writeBlocksToFile(filePath, bs.blockMap[filePath]); err != nil {
+				return err
+			}
+			bs.blockMap[filePath] = nil
 		}
-	}
-
-	data, err := json.Marshal(block)
-	if err != nil {
-		return err
-	}
-
-	if _, err := bs.file.Write(data); err != nil {
-		return err
 	}
 
 	return nil
 }
 
-func (bs *BlockStore) Close() {
-	// Write the closing bracket for a JSON array
-	if _, err := bs.file.WriteString("\n]\n"); err != nil {
-		panic(err)
+// getFileNameForBlock generates a file name based on the block height
+func (bs *BlockStore) getFileNameForBlock(blockHeight int64) string {
+	startHeight := (blockHeight / BLOCKS_PER_FILE) * BLOCKS_PER_FILE
+	endHeight := startHeight + BLOCKS_PER_FILE - 1
+	return fmt.Sprintf("%d_%d_blocks.json", startHeight, endHeight)
+}
+
+// writeBlocksToFile writes the blocks to a JSON file
+func (bs *BlockStore) writeBlocksToFile(filePath string, blocks []*protocol.Block) error {
+	// Sort blocks by height before writing
+	sort.Slice(blocks, func(i, j int) bool {
+		return blocks[i].BlockHeight < blocks[j].BlockHeight
+	})
+
+	// Create the block directory if it doesn't exist
+	if err := os.MkdirAll(bs.blockDir, os.ModePerm); err != nil {
+		return err
 	}
 
-	if bs.file != nil {
-		bs.file.Close()
+	// Open the file for writing (create or append)
+	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return err
 	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	if err := encoder.Encode(blocks); err != nil {
+		return err
+	}
+
+	return nil
 }

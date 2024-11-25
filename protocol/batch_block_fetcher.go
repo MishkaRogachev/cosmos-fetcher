@@ -9,7 +9,9 @@ import (
 const BLOCK_PER_BATCH = 16
 
 type BlockBatch struct {
-	Blocks []*Block
+	StartBlockHeight int64
+	EndBlockHeight   int64
+	Blocks           []*Block
 }
 
 type BatchBlockFetcher struct {
@@ -34,16 +36,20 @@ func NewBatchBlockFetcher(client *RPCClient, startBlockHeight, endBlockHeight in
 	}
 }
 
-func (bbf *BatchBlockFetcher) sendBatch(batch []*Block) {
+func (bbf *BatchBlockFetcher) sendBatch(startBlockHeight, endBlockHeight int64, blocks []*Block) {
 	// Sort blocks by height before sending
-	sort.Slice(batch, func(i, j int) bool {
-		return batch[i].BlockHeight < batch[j].BlockHeight
+	sort.Slice(blocks, func(i, j int) bool {
+		return blocks[i].BlockHeight < blocks[j].BlockHeight
 	})
-	bbf.BatchChannel <- &BlockBatch{Blocks: batch}
+	bbf.BatchChannel <- &BlockBatch{
+		Blocks:           blocks,
+		StartBlockHeight: startBlockHeight,
+		EndBlockHeight:   endBlockHeight,
+	}
 }
 
 func (bbf *BatchBlockFetcher) fetchBlocksForWorkerID(workerID int) {
-	batch := []*Block{}
+	blocks := []*Block{}
 	for batchStart := bbf.startBlockHeight + int64(workerID)*BLOCK_PER_BATCH; batchStart <= bbf.endBlockHeight; batchStart += int64(bbf.numWorkers * BLOCK_PER_BATCH) {
 		batchEnd := batchStart + BLOCK_PER_BATCH - 1
 		if batchEnd > bbf.endBlockHeight {
@@ -61,14 +67,14 @@ func (bbf *BatchBlockFetcher) fetchBlocksForWorkerID(workerID int) {
 					// TODO: retry fetching the block
 					continue
 				}
-				batch = append(batch, block)
+				blocks = append(blocks, block)
 			}
 		}
 
 		// Send the completed batch if it's not empty
-		if len(batch) > 0 {
-			bbf.sendBatch(batch)
-			batch = []*Block{}
+		if len(blocks) > 0 {
+			bbf.sendBatch(batchStart, batchEnd, blocks)
+			blocks = []*Block{}
 		}
 	}
 }

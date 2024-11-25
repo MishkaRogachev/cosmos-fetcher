@@ -90,15 +90,13 @@ func main() {
 	batchBlockFetcher.StartFetchingBlocks()
 	defer batchBlockFetcher.StopFetchingBlocks()
 
-	blockStore := persistence.NewBlockStore("blocks.json")
-	defer blockStore.Close()
+	blockStore := persistence.NewBlockStore("blocks")
 
 	for batch := range batchBlockFetcher.BatchChannel {
-		for _, block := range batch.Blocks {
-			fmt.Printf("Fetched Block Height: %d\n", block.BlockHeight)
-			if err := blockStore.SaveBlock(block); err != nil {
-				log.Printf("Error saving block: %v", err)
-			}
+		fmt.Printf("Fetched blocks: %d - %d\n", batch.StartBlockHeight, batch.EndBlockHeight)
+
+		if err := blockStore.SaveBlocks(batch.Blocks); err != nil {
+			log.Printf("Error saving blocks: %v", err)
 		}
 	}
 }
