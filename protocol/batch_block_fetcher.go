@@ -7,7 +7,7 @@ import (
 	"sync"
 )
 
-const BLOCK_PER_BATCH = 16
+const BLOCK_PER_BATCH = 12
 
 type BlockBatch struct {
 	StartBlockHeight int64

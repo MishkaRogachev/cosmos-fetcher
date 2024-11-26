@@ -107,7 +107,7 @@ func main() {
 	for batch := range batchBlockFetcher.BatchChannel {
 		fmt.Printf("Fetched blocks: %d - %d\n", batch.StartBlockHeight, batch.EndBlockHeight)
 
-		if err := blockStore.SaveBlocks(batch.Blocks); err != nil {
+		if err := blockStore.SaveBlocks(batch.Blocks, endHeight); err != nil {
 			log.Printf("Error saving blocks: %v", err)
 		}
 	}
