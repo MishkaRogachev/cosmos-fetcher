@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 
 	"github.com/MishkaRogachev/cosmos-fetcher/persistence"
 	"github.com/MishkaRogachev/cosmos-fetcher/protocol"
@@ -38,6 +40,10 @@ func ParseCLI() Config {
 
 func main() {
 	config := ParseCLI()
+
+	// Signal handling for graceful shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt)
 
 	// 1. Test the RPC client availability by sending a GET request to the RPC URL
 	httpClient := &http.Client{}
@@ -87,10 +93,16 @@ func main() {
 
 	// 5. Fetch & store blocks
 	batchBlockFetcher := protocol.NewBatchBlockFetcher(rpcClient, startHeight, endHeight, config.NumWorkers)
-	batchBlockFetcher.StartFetchingBlocks()
-	defer batchBlockFetcher.StopFetchingBlocks()
-
 	blockStore := persistence.NewBlockStore("blocks")
+
+	batchBlockFetcher.StartFetchingBlocks()
+
+	// Handle graceful shutdown using channel for listening to quit signals
+	go func() {
+		<-quit
+		fmt.Println("\nShutting down gracefully...")
+		batchBlockFetcher.StopFetchingBlocks() // Signal all fetchers to stop
+	}()
 
 	for batch := range batchBlockFetcher.BatchChannel {
 		fmt.Printf("Fetched blocks: %d - %d\n", batch.StartBlockHeight, batch.EndBlockHeight)
@@ -99,4 +111,9 @@ func main() {
 			log.Printf("Error saving blocks: %v", err)
 		}
 	}
+
+	// Wait for all workers to complete
+	<-batchBlockFetcher.WaitDone()
+
+	fmt.Println("Exiting.")
 }

@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"fmt"
 	"log"
 	"sort"
 	"sync"
@@ -20,8 +21,9 @@ type BatchBlockFetcher struct {
 	endBlockHeight   int64
 	numWorkers       int
 	BatchChannel     chan *BlockBatch
-	quit             chan struct{}
 	wg               sync.WaitGroup
+	done             chan struct{}
+	quit             chan struct{}
 }
 
 func NewBatchBlockFetcher(client *RPCClient, startBlockHeight, endBlockHeight int64, numWorkers int) *BatchBlockFetcher {
@@ -33,6 +35,7 @@ func NewBatchBlockFetcher(client *RPCClient, startBlockHeight, endBlockHeight in
 		numWorkers:       numWorkers,
 		BatchChannel:     make(chan *BlockBatch),
 		quit:             make(chan struct{}),
+		done:             make(chan struct{}),
 	}
 }
 
@@ -49,12 +52,18 @@ func (bbf *BatchBlockFetcher) sendBatch(startBlockHeight, endBlockHeight int64, 
 }
 
 func (bbf *BatchBlockFetcher) fetchBlocksForWorkerID(workerID int) {
+	// Notify that this worker is done when the function returns
+	bbf.wg.Add(1)
+	defer bbf.wg.Done()
+
 	blocks := []*Block{}
 	for batchStart := bbf.startBlockHeight + int64(workerID)*BLOCK_PER_BATCH; batchStart <= bbf.endBlockHeight; batchStart += int64(bbf.numWorkers * BLOCK_PER_BATCH) {
 		batchEnd := batchStart + BLOCK_PER_BATCH - 1
 		if batchEnd > bbf.endBlockHeight {
 			batchEnd = bbf.endBlockHeight
 		}
+
+		fmt.Println("Worker", workerID, "starts to fetch blocks", batchStart, "to", batchEnd)
 
 		for height := batchStart; height <= batchEnd; height++ {
 			select {
@@ -77,20 +86,27 @@ func (bbf *BatchBlockFetcher) fetchBlocksForWorkerID(workerID int) {
 			blocks = []*Block{}
 		}
 	}
+	fmt.Println("Worker", workerID, "finished")
 }
 
 func (bbf *BatchBlockFetcher) StartFetchingBlocks() {
 	for i := 0; i < bbf.numWorkers; i++ {
-		bbf.wg.Add(1)
-		go func(workerID int) {
-			defer bbf.wg.Done()
-			bbf.fetchBlocksForWorkerID(workerID)
-		}(i)
+		go bbf.fetchBlocksForWorkerID(i)
 	}
+
+	// Wait for all workers to complete, then close the BatchChannel and signal done
+	go func() {
+		bbf.wg.Wait()
+		close(bbf.BatchChannel)
+		close(bbf.done)
+	}()
 }
 
 func (bbf *BatchBlockFetcher) StopFetchingBlocks() {
 	close(bbf.quit)
 	bbf.wg.Wait()
-	close(bbf.BatchChannel)
+}
+
+func (bbf *BatchBlockFetcher) WaitDone() <-chan struct{} {
+	return bbf.done
 }
