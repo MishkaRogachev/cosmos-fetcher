@@ -25,8 +25,8 @@ type BatchBlockFetcher struct {
 	quit             chan struct{}
 }
 
-func NewBatchBlockFetcher(client *RPCClient, startBlockHeight, endBlockHeight int64, numWorkers, blocksPerBatch int) *BatchBlockFetcher {
-	blockFetcher := NewBlockFetcher(client)
+func NewBatchBlockFetcher(client *RPCClient, startBlockHeight, endBlockHeight int64, numWorkers, blocksPerBatch, maxRetries, retryInterval int) *BatchBlockFetcher {
+	blockFetcher := NewBlockFetcher(client, maxRetries, retryInterval)
 	return &BatchBlockFetcher{
 		BlockFetcher:     *blockFetcher,
 		startBlockHeight: startBlockHeight,
@@ -70,10 +70,10 @@ func (bbf *BatchBlockFetcher) fetchBlocksForWorkerID(workerID int) {
 			case <-bbf.quit:
 				return
 			default:
-				block, err := bbf.FetchBlock(height)
+				block, err := bbf.FetchBlockWithRetries(height)
 				if err != nil {
-					log.Printf("Error fetching block at height %d: %v", height, err)
-					// TODO: retry fetching the block
+					// Log the error but continue with the next blocks
+					log.Printf("Failed to fetch block %d after retries: %v", height, err)
 					continue
 				}
 				blocks = append(blocks, block)

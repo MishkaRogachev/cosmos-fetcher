@@ -19,6 +19,8 @@ type Config struct {
 	NumWorkers     int
 	BlocksPerBatch int
 	BlocksPerFile  int
+	MaxRetries     int
+	RetryInterval  int
 }
 
 // ParseCLI parses the command line arguments and returns the configuration
@@ -31,6 +33,8 @@ func ParseCLI() Config {
 	flag.IntVar(&config.NumWorkers, "parallelism", 5, "The number of parallel fetchers to use")
 	flag.IntVar(&config.BlocksPerBatch, "batch-blocks", 8, "The number of blocks to fetch per batch")
 	flag.IntVar(&config.BlocksPerFile, "file-blocks", 16, "The number of blocks to store per file")
+	flag.IntVar(&config.MaxRetries, "max-retries", 3, "The maximum number of retries for fetching a block")
+	flag.IntVar(&config.RetryInterval, "retry-interval", 500, "The interval in milliseconds between retries")
 
 	flag.Parse()
 
@@ -81,22 +85,40 @@ func main() {
 	// 4. Set default block range if not provided
 	startHeight := config.StartHeight
 	endHeight := config.EndHeight
+	if startHeight > endHeight {
+		log.Fatalf("Invalid block range: start height is later than end height")
+		return
+	}
+	if startHeight >= syncInfo.LatestBlockHeight {
+		log.Fatalf("Start height is later than the latest block height (%d)", syncInfo.LatestBlockHeight)
+		return
+	}
+
 	if startHeight < syncInfo.EarliestBlockHeight {
 		if startHeight != 0 {
 			fmt.Println("Start height is earlier than the earliest block height, setting to earliest block height")
 		}
 		startHeight = syncInfo.EarliestBlockHeight
 	}
-	if endHeight == 0 || endHeight > syncInfo.LatestBlockHeight {
+	if endHeight > syncInfo.LatestBlockHeight {
 		if endHeight != 0 {
-			fmt.Println("End height is later than the latest block height, setting to latest block height")
+			fmt.Printf("End height is later than the latest block height, setting to latest block height (%d)\n", syncInfo.LatestBlockHeight)
 		}
 		endHeight = syncInfo.LatestBlockHeight
 	}
+
 	fmt.Printf("Fetching blocks in range %d-%d using %d workers\n", startHeight, endHeight, config.NumWorkers)
 
 	// 5. Fetch & store blocks
-	batchBlockFetcher := protocol.NewBatchBlockFetcher(rpcClient, startHeight, endHeight, config.NumWorkers, config.BlocksPerBatch)
+	batchBlockFetcher := protocol.NewBatchBlockFetcher(
+		rpcClient,
+		startHeight,
+		endHeight,
+		config.NumWorkers,
+		config.BlocksPerBatch,
+		config.MaxRetries,
+		config.RetryInterval,
+	)
 	blockStore := persistence.NewBlockStore("blocks", config.BlocksPerFile)
 
 	batchBlockFetcher.StartFetchingBlocks()

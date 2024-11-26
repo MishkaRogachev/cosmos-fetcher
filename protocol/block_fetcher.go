@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"time"
 )
 
 type Block struct {
@@ -14,11 +15,17 @@ type Block struct {
 }
 
 type BlockFetcher struct {
-	client *RPCClient
+	client        *RPCClient
+	maxRetries    int
+	retryInterval int
 }
 
-func NewBlockFetcher(client *RPCClient) *BlockFetcher {
-	return &BlockFetcher{client: client}
+func NewBlockFetcher(client *RPCClient, maxRetries, retryInterval int) *BlockFetcher {
+	return &BlockFetcher{
+		client:        client,
+		maxRetries:    maxRetries,
+		retryInterval: retryInterval,
+	}
 }
 
 func (bf *BlockFetcher) FetchBlock(height int64) (*Block, error) {
@@ -63,4 +70,23 @@ func (bf *BlockFetcher) FetchBlock(height int64) (*Block, error) {
 		NumTransactions: numTransactions,
 		ChainID:         chainID,
 	}, nil
+}
+
+func (bf *BlockFetcher) FetchBlockWithRetries(height int64) (*Block, error) {
+	for i := 0; i < bf.maxRetries; i++ {
+		block, err := bf.FetchBlock(height)
+		if err == nil {
+			return block, nil
+		}
+
+		fmt.Printf("Error fetching block at height %d: %v\n", height, err)
+
+		if i < bf.maxRetries-1 {
+			fmt.Printf("Retrying in %d seconds...\n", bf.retryInterval)
+			fmt.Printf("Retrying in %d milliseconds...\n", bf.retryInterval)
+			time.Sleep(time.Duration(bf.retryInterval) * time.Millisecond)
+		}
+	}
+
+	return nil, fmt.Errorf("failed to fetch block at height %d after %d retries", height, bf.maxRetries)
 }
