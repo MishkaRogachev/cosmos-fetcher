@@ -7,8 +7,6 @@ import (
 	"sync"
 )
 
-const BLOCK_PER_BATCH = 12
-
 type BlockBatch struct {
 	StartBlockHeight int64
 	EndBlockHeight   int64
@@ -20,19 +18,21 @@ type BatchBlockFetcher struct {
 	startBlockHeight int64
 	endBlockHeight   int64
 	numWorkers       int
+	blocksPerBatch   int
 	BatchChannel     chan *BlockBatch
 	wg               sync.WaitGroup
 	done             chan struct{}
 	quit             chan struct{}
 }
 
-func NewBatchBlockFetcher(client *RPCClient, startBlockHeight, endBlockHeight int64, numWorkers int) *BatchBlockFetcher {
+func NewBatchBlockFetcher(client *RPCClient, startBlockHeight, endBlockHeight int64, numWorkers, blocksPerBatch int) *BatchBlockFetcher {
 	blockFetcher := NewBlockFetcher(client)
 	return &BatchBlockFetcher{
 		BlockFetcher:     *blockFetcher,
 		startBlockHeight: startBlockHeight,
 		endBlockHeight:   endBlockHeight,
 		numWorkers:       numWorkers,
+		blocksPerBatch:   blocksPerBatch,
 		BatchChannel:     make(chan *BlockBatch),
 		quit:             make(chan struct{}),
 		done:             make(chan struct{}),
@@ -57,8 +57,8 @@ func (bbf *BatchBlockFetcher) fetchBlocksForWorkerID(workerID int) {
 	defer bbf.wg.Done()
 
 	blocks := []*Block{}
-	for batchStart := bbf.startBlockHeight + int64(workerID)*BLOCK_PER_BATCH; batchStart <= bbf.endBlockHeight; batchStart += int64(bbf.numWorkers * BLOCK_PER_BATCH) {
-		batchEnd := batchStart + BLOCK_PER_BATCH - 1
+	for batchStart := bbf.startBlockHeight + int64(workerID*bbf.blocksPerBatch); batchStart <= bbf.endBlockHeight; batchStart += int64(bbf.numWorkers * bbf.blocksPerBatch) {
+		batchEnd := batchStart + int64(bbf.blocksPerBatch) - 1
 		if batchEnd > bbf.endBlockHeight {
 			batchEnd = bbf.endBlockHeight
 		}

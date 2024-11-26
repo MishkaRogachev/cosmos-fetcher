@@ -13,10 +13,12 @@ import (
 )
 
 type Config struct {
-	NodeURL     string
-	StartHeight int64
-	EndHeight   int64
-	NumWorkers  int
+	NodeURL        string
+	StartHeight    int64
+	EndHeight      int64
+	NumWorkers     int
+	BlocksPerBatch int
+	BlocksPerFile  int
 }
 
 // ParseCLI parses the command line arguments and returns the configuration
@@ -27,6 +29,8 @@ func ParseCLI() Config {
 	flag.Int64Var(&config.StartHeight, "start-height", 0, "The start block height to fetch (default: earliest available)")
 	flag.Int64Var(&config.EndHeight, "end-height", 0, "The end block height to fetch (default: latest available)")
 	flag.IntVar(&config.NumWorkers, "parallelism", 5, "The number of parallel fetchers to use")
+	flag.IntVar(&config.BlocksPerBatch, "batch-blocks", 8, "The number of blocks to fetch per batch")
+	flag.IntVar(&config.BlocksPerFile, "file-blocks", 16, "The number of blocks to store per file")
 
 	flag.Parse()
 
@@ -92,8 +96,8 @@ func main() {
 	fmt.Printf("Fetching blocks in range %d-%d using %d workers\n", startHeight, endHeight, config.NumWorkers)
 
 	// 5. Fetch & store blocks
-	batchBlockFetcher := protocol.NewBatchBlockFetcher(rpcClient, startHeight, endHeight, config.NumWorkers)
-	blockStore := persistence.NewBlockStore("blocks")
+	batchBlockFetcher := protocol.NewBatchBlockFetcher(rpcClient, startHeight, endHeight, config.NumWorkers, config.BlocksPerBatch)
+	blockStore := persistence.NewBlockStore("blocks", config.BlocksPerFile)
 
 	batchBlockFetcher.StartFetchingBlocks()
 
