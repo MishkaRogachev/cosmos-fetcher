@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/MishkaRogachev/cosmos-fetcher/persistence"
 	"github.com/MishkaRogachev/cosmos-fetcher/protocol"
@@ -21,6 +22,7 @@ type Config struct {
 	BlocksPerFile  int
 	MaxRetries     int
 	RetryInterval  int
+	ListRanges     bool
 }
 
 // ParseCLI parses the command line arguments and returns the configuration
@@ -35,6 +37,7 @@ func ParseCLI() Config {
 	flag.IntVar(&config.BlocksPerFile, "file-blocks", 16, "The number of blocks to store per file")
 	flag.IntVar(&config.MaxRetries, "max-retries", 3, "The maximum number of retries for fetching a block")
 	flag.IntVar(&config.RetryInterval, "retry-interval", 500, "The interval in milliseconds between retries")
+	flag.BoolVar(&config.ListRanges, "list-ranges", false, "List the available block ranges and exit")
 
 	flag.Parse()
 
@@ -54,7 +57,10 @@ func main() {
 	signal.Notify(quit, os.Interrupt)
 
 	// 1. Test the RPC client availability by sending a GET request to the RPC URL
-	httpClient := &http.Client{}
+	httpClient := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
 	resp, err := httpClient.Get(config.NodeURL)
 	if err != nil {
 		log.Fatalf("Cannot reach RPC endpoint: %v", err)
@@ -82,6 +88,11 @@ func main() {
 		log.Fatalf("Error parsing sync_info: %v", err)
 	}
 
+	if config.ListRanges {
+		fmt.Printf("Available block ranges: %d-%d\n", syncInfo.EarliestBlockHeight, syncInfo.LatestBlockHeight)
+		return
+	}
+
 	// 4. Set default block range if not provided
 	startHeight := config.StartHeight
 	endHeight := config.EndHeight
@@ -96,11 +107,11 @@ func main() {
 
 	if startHeight < syncInfo.EarliestBlockHeight {
 		if startHeight != 0 {
-			fmt.Println("Start height is earlier than the earliest block height, setting to earliest block height")
+			fmt.Printf("Start height is earlier than the earliest block height, setting to earliest block height (%d)", syncInfo.EarliestBlockHeight)
 		}
 		startHeight = syncInfo.EarliestBlockHeight
 	}
-	if endHeight > syncInfo.LatestBlockHeight {
+	if endHeight == 0 || endHeight > syncInfo.LatestBlockHeight {
 		if endHeight != 0 {
 			fmt.Printf("End height is later than the latest block height, setting to latest block height (%d)\n", syncInfo.LatestBlockHeight)
 		}

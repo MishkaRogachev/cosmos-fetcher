@@ -82,7 +82,6 @@ func (bf *BlockFetcher) FetchBlockWithRetries(height int64) (*Block, error) {
 		fmt.Printf("Error fetching block at height %d: %v\n", height, err)
 
 		if i < bf.maxRetries-1 {
-			fmt.Printf("Retrying in %d seconds...\n", bf.retryInterval)
 			fmt.Printf("Retrying in %d milliseconds...\n", bf.retryInterval)
 			time.Sleep(time.Duration(bf.retryInterval) * time.Millisecond)
 		}

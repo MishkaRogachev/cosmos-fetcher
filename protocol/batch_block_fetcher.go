@@ -73,7 +73,7 @@ func (bbf *BatchBlockFetcher) fetchBlocksForWorkerID(workerID int) {
 				block, err := bbf.FetchBlockWithRetries(height)
 				if err != nil {
 					// Log the error but continue with the next blocks
-					log.Printf("Failed to fetch block %d after retries: %v", height, err)
+					log.Printf("Skip block %d because of error: %v", height, err)
 					continue
 				}
 				blocks = append(blocks, block)
