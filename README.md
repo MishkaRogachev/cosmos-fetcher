@@ -1,5 +1,7 @@
 # cosmos-fetcher
 
+![Go CI](https://github.com/MishkaRogachev/cosmos-fetcher/actions/workflows/ci.yml/badge.svg)
+
 ### Flag Descriptions
 
 - **`--node-url`**: The URL of the Cosmos node's RPC endpoint.

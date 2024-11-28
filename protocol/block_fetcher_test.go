@@ -90,11 +90,13 @@ func TestBlockFetcher_StartFetchingBlocks(t *testing.T) {
 
 	// Listen for blocks in a routine
 	var fetchedBlocks []*protocol.Block
+	doneChan := make(chan struct{})
 	go func() {
 		for block := range fetcher.GetChannel() {
-			fmt.Println("Received block", block.BlockHeight)
 			fetchedBlocks = append(fetchedBlocks, block)
+			fmt.Printf("Received block %d\n", block.BlockHeight)
 		}
+		close(doneChan) // Close when we are done reading from the channel
 	}()
 
 	// Start fetching blocks
@@ -102,7 +104,8 @@ func TestBlockFetcher_StartFetchingBlocks(t *testing.T) {
 
 	// Wait for all blocks to be fetched
 	<-fetcher.WaitDone()
-	assert.Len(t, fetchedBlocks, 10)
+	<-doneChan
+	assert.Len(t, fetchedBlocks, 10, "Expected to fetch 10 blocks")
 
 	// We don't expect the blocks to be in order
 	sort.Slice(fetchedBlocks, func(i, j int) bool {
