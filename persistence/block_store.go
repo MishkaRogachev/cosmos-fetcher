@@ -80,7 +80,10 @@ func (bs *BlockStore) SaveBlock(block *protocol.Block) error {
 	isInserted := false
 	for i, b := range bs.blockMap[startHeight] {
 		if b.BlockHeight > block.BlockHeight {
-			bs.blockMap[startHeight] = append(bs.blockMap[startHeight][:i], append([]*protocol.Block{block}, bs.blockMap[startHeight][i:]...)...)
+			bs.blockMap[startHeight] = append(
+				bs.blockMap[startHeight][:i],
+				append([]*protocol.Block{block}, bs.blockMap[startHeight][i:]...)...,
+			)
 			isInserted = true
 			break
 		}
