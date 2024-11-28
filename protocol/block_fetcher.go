@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -15,16 +16,29 @@ type Block struct {
 }
 
 type BlockFetcher struct {
-	client        *RPCClient
-	maxRetries    int
-	retryInterval int
+	client           *RPCClient
+	startBlockHeight int64
+	endBlockHeight   int64
+	numWorkers       int
+	maxRetries       int
+	retryInterval    int
+	channel          chan *Block
+	wg               sync.WaitGroup
+	done             chan struct{}
+	quit             chan struct{}
 }
 
-func NewBlockFetcher(client *RPCClient, maxRetries, retryInterval int) *BlockFetcher {
+func NewBlockFetcher(client *RPCClient, startBlockHeight, endBlockHeight int64, numWorkers, maxRetries, retryInterval int) *BlockFetcher {
 	return &BlockFetcher{
-		client:        client,
-		maxRetries:    maxRetries,
-		retryInterval: retryInterval,
+		client:           client,
+		startBlockHeight: startBlockHeight,
+		endBlockHeight:   endBlockHeight,
+		numWorkers:       numWorkers,
+		maxRetries:       maxRetries,
+		retryInterval:    retryInterval,
+		channel:          make(chan *Block),
+		quit:             make(chan struct{}),
+		done:             make(chan struct{}),
 	}
 }
 
@@ -88,4 +102,56 @@ func (bf *BlockFetcher) FetchBlockWithRetries(height int64) (*Block, error) {
 	}
 
 	return nil, fmt.Errorf("failed to fetch block at height %d after %d retries", height, bf.maxRetries)
+}
+
+func (bf *BlockFetcher) fetchBlocksForWorkerID(workerID int) {
+	// Notify that this worker is done when the function returns
+	bf.wg.Add(1)
+	defer bf.wg.Done()
+
+	fmt.Println("Worker", workerID, "starts..")
+
+	for cursor := bf.startBlockHeight + int64(workerID); cursor <= bf.endBlockHeight; cursor += int64(bf.numWorkers) {
+		select {
+		case <-bf.quit:
+			return
+		default:
+			block, err := bf.FetchBlockWithRetries(cursor)
+			if err != nil {
+				// Log the error but continue with the next blocks
+				fmt.Printf("Skip block %d because of error: %v\n", cursor, err)
+				continue
+			}
+
+			bf.channel <- block
+		}
+	}
+
+	fmt.Println("Worker", workerID, "finished")
+}
+
+func (bf *BlockFetcher) StartFetchingBlocks() {
+	for i := 0; i < bf.numWorkers; i++ {
+		go bf.fetchBlocksForWorkerID(i)
+	}
+
+	// Wait for all workers to complete, then close the BatchChannel and signal done
+	go func() {
+		bf.wg.Wait()
+		close(bf.channel)
+		close(bf.done)
+	}()
+}
+
+func (bf *BlockFetcher) StopFetchingBlocks() {
+	close(bf.quit)
+	bf.wg.Wait()
+}
+
+func (bf *BlockFetcher) WaitDone() <-chan struct{} {
+	return bf.done
+}
+
+func (bf *BlockFetcher) GetChannel() <-chan *Block {
+	return bf.channel
 }

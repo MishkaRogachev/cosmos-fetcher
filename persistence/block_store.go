@@ -3,9 +3,9 @@ package persistence
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
-	"sort"
 
 	"github.com/MishkaRogachev/cosmos-fetcher/protocol"
 )
@@ -24,43 +24,15 @@ func NewBlockStore(blockDir string, blocksPerFile int) *BlockStore {
 	}
 }
 
-func (bs *BlockStore) SaveBlocks(new_blocks []*protocol.Block, endHeight int64) error {
-	// Group blocks by startHeight to reduce io operations
-	// Unfinished blocks will be written to file when the next block is processed
-	for _, block := range new_blocks {
-		startHeight := (block.BlockHeight / int64(bs.blocksPerFile)) * int64(bs.blocksPerFile)
-		bs.blockMap[startHeight] = append(bs.blockMap[startHeight], block)
+func (bs *BlockStore) writeBlocksToFile(blocks []*protocol.Block) error {
+	if len(blocks) == 0 {
+		return nil
 	}
 
-	// Write blocks to their respective files
-	for startHeight, blocks := range bs.blockMap {
-		block_count := len(blocks)
-		if block_count >= bs.blocksPerFile || (block_count > 0 && blocks[block_count-1].BlockHeight == endHeight) {
-			// Sort blocks before writing to file, should be fast since they are already mostly sorted
-			sort.Slice(blocks, func(i, j int) bool {
-				return blocks[i].BlockHeight < blocks[j].BlockHeight
-			})
+	startHeight := blocks[0].BlockHeight
+	endHeight := blocks[len(blocks)-1].BlockHeight
+	filePath := filepath.Join(bs.blockDir, fmt.Sprintf("%d_%d_blocks.json", startHeight, endHeight))
 
-			// Generate file path
-			endHeight := min(startHeight+int64(bs.blocksPerFile)-1, endHeight)
-			fileName := fmt.Sprintf("%d_%d_blocks.json", startHeight, endHeight)
-			filePath := filepath.Join(bs.blockDir, fileName)
-
-			fmt.Printf("Writing blocks to file: %s\n", filePath)
-
-			// Write blocks to file
-			if err := bs.writeBlocksToFile(filePath, blocks); err != nil {
-				return err
-			}
-			// Clear the list after writing to file
-			bs.blockMap[startHeight] = nil
-		}
-	}
-
-	return nil
-}
-
-func (bs *BlockStore) writeBlocksToFile(filePath string, blocks []*protocol.Block) error {
 	if err := os.MkdirAll(bs.blockDir, os.ModePerm); err != nil {
 		return err
 	}
@@ -77,4 +49,42 @@ func (bs *BlockStore) writeBlocksToFile(filePath string, blocks []*protocol.Bloc
 	}
 
 	return nil
+}
+
+func (bs *BlockStore) SaveBlock(block *protocol.Block) error {
+	startHeight := (block.BlockHeight / int64(bs.blocksPerFile)) * int64(bs.blocksPerFile)
+
+	// Find the position to insert the block in sorted order
+	inserted := false
+	for i, b := range bs.blockMap[startHeight] {
+		if b.BlockHeight > block.BlockHeight {
+			bs.blockMap[startHeight] = append(bs.blockMap[startHeight][:i], append([]*protocol.Block{block}, bs.blockMap[startHeight][i:]...)...)
+			inserted = true
+			break
+		}
+	}
+	if !inserted {
+		bs.blockMap[startHeight] = append(bs.blockMap[startHeight], block)
+	}
+
+	block_count := len(bs.blockMap[startHeight])
+	if block_count >= bs.blocksPerFile {
+		if err := bs.writeBlocksToFile(bs.blockMap[startHeight]); err != nil {
+			return err
+		}
+		// Clear the list after writing to file
+		bs.blockMap[startHeight] = nil
+	}
+
+	return nil
+}
+
+func (bs *BlockStore) Close() {
+	for _, blocks := range bs.blockMap {
+		if len(blocks) > 0 {
+			if err := bs.writeBlocksToFile(blocks); err != nil {
+				log.Printf("Error writing blocks to file: %v", err)
+			}
+		}
+	}
 }

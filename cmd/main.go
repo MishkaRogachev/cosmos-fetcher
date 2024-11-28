@@ -14,15 +14,14 @@ import (
 )
 
 type Config struct {
-	NodeURL        string
-	StartHeight    int64
-	EndHeight      int64
-	NumWorkers     int
-	BlocksPerBatch int
-	BlocksPerFile  int
-	MaxRetries     int
-	RetryInterval  int
-	ListRanges     bool
+	NodeURL       string
+	StartHeight   int64
+	EndHeight     int64
+	NumWorkers    int
+	BlocksPerFile int
+	MaxRetries    int
+	RetryInterval int
+	ListRanges    bool
 }
 
 // ParseCLI parses the command line arguments and returns the configuration
@@ -33,7 +32,6 @@ func ParseCLI() Config {
 	flag.Int64Var(&config.StartHeight, "start-height", 0, "The start block height to fetch (default: earliest available)")
 	flag.Int64Var(&config.EndHeight, "end-height", 0, "The end block height to fetch (default: latest available)")
 	flag.IntVar(&config.NumWorkers, "parallelism", 5, "The number of parallel fetchers to use")
-	flag.IntVar(&config.BlocksPerBatch, "batch-blocks", 8, "The number of blocks to fetch per batch")
 	flag.IntVar(&config.BlocksPerFile, "file-blocks", 16, "The number of blocks to store per file")
 	flag.IntVar(&config.MaxRetries, "max-retries", 3, "The maximum number of retries for fetching a block")
 	flag.IntVar(&config.RetryInterval, "retry-interval", 500, "The interval in milliseconds between retries")
@@ -121,36 +119,34 @@ func main() {
 	fmt.Printf("Fetching blocks in range %d-%d using %d workers\n", startHeight, endHeight, config.NumWorkers)
 
 	// 5. Fetch & store blocks
-	batchBlockFetcher := protocol.NewBatchBlockFetcher(
+	fetcher := protocol.NewBlockFetcher(
 		rpcClient,
 		startHeight,
 		endHeight,
 		config.NumWorkers,
-		config.BlocksPerBatch,
 		config.MaxRetries,
 		config.RetryInterval,
 	)
 	blockStore := persistence.NewBlockStore("blocks", config.BlocksPerFile)
 
-	batchBlockFetcher.StartFetchingBlocks()
+	fetcher.StartFetchingBlocks()
 
 	// Handle graceful shutdown using channel for listening to quit signals
 	go func() {
 		<-quit
 		fmt.Println("\nShutting down gracefully...")
-		batchBlockFetcher.StopFetchingBlocks() // Signal all fetchers to stop
+		fetcher.StopFetchingBlocks() // Signal all fetchers to stop
 	}()
 
-	for batch := range batchBlockFetcher.BatchChannel {
-		fmt.Printf("Fetched blocks: %d - %d\n", batch.StartBlockHeight, batch.EndBlockHeight)
-
-		if err := blockStore.SaveBlocks(batch.Blocks, endHeight); err != nil {
-			log.Printf("Error saving blocks: %v", err)
+	for block := range fetcher.GetChannel() {
+		if err := blockStore.SaveBlock(block); err != nil {
+			log.Printf("Error saving block: %v", err)
 		}
 	}
 
 	// Wait for all workers to complete
-	<-batchBlockFetcher.WaitDone()
+	<-fetcher.WaitDone()
+	blockStore.Close()
 
 	fmt.Println("Exiting.")
 }
