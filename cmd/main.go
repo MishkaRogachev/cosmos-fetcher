@@ -148,5 +148,5 @@ func main() {
 	<-fetcher.WaitDone()
 	blockStore.Close()
 
-	fmt.Println("Exiting.")
+	fmt.Println("Exiting!")
 }

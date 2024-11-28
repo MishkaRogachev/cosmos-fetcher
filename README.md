@@ -1,7 +1,15 @@
 # cosmos-fetcher
 
+### Flag Descriptions
 
-
+- **`--node-url`**: The URL of the Cosmos node's RPC endpoint.
+- **`--start-height`**: The starting block height to begin fetching from. The default is the earliest available height.
+- **`--end-height`**: The ending block height to stop fetching at. The default is the latest available height.
+- **`--parallelism`**: The number of parallel fetchers to use for fetching blocks concurrently. Default is 5.
+- **`--file-blocks`**: The number of blocks to store per JSON file. Default is 16.
+- **`--max-retries`**: The maximum number of retries allowed when fetching a block fails. Default is 3 retries.
+- **`--retry-interval`**: The time interval between retries in milliseconds. Default is 500 milliseconds.
+- **`--list-ranges`**: If set, the application will list available block ranges and exit without fetching.
 
 ## Examples
 
@@ -13,7 +21,7 @@ go run cmd/main.go -list-ranges  -node-url https://rpc.provider-sentry-01.ics-te
 2. Crop by earliest block height
 ```
 go run cmd/main.go -start-height 4000000 -end-height 4285100  -node-url https://rpc.provider-sentry-01.ics-testnet.polypore.xyz
-
+```
 
 3. Crop by latest block height
 ```

@@ -59,12 +59,12 @@ func (bf *BlockFetcher) FetchBlock(height int64) (*Block, error) {
 		Result BlockResult `json:"result"`
 		Error  *RPCError   `json:"error"`
 	}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, err
-	}
-
 	if result.Error != nil {
 		return nil, fmt.Errorf("RPC error: %s", result.Error.Message)
+	}
+
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, err
 	}
 
 	numTransactions := len(result.Result.Block.Data.Txs)
@@ -93,7 +93,7 @@ func (bf *BlockFetcher) FetchBlockWithRetries(height int64) (*Block, error) {
 			return block, nil
 		}
 
-		fmt.Printf("Error fetching block at height %d: %v\n", height, err)
+		fmt.Printf("Error fetching block at height %d\n", height)
 
 		if i < bf.maxRetries-1 {
 			fmt.Printf("Retrying in %d milliseconds...\n", bf.retryInterval)
@@ -106,7 +106,6 @@ func (bf *BlockFetcher) FetchBlockWithRetries(height int64) (*Block, error) {
 
 func (bf *BlockFetcher) fetchBlocksForWorkerID(workerID int) {
 	// Notify that this worker is done when the function returns
-	bf.wg.Add(1)
 	defer bf.wg.Done()
 
 	fmt.Println("Worker", workerID, "starts..")
@@ -132,12 +131,15 @@ func (bf *BlockFetcher) fetchBlocksForWorkerID(workerID int) {
 
 func (bf *BlockFetcher) StartFetchingBlocks() {
 	for i := 0; i < bf.numWorkers; i++ {
+		bf.wg.Add(1)
 		go bf.fetchBlocksForWorkerID(i)
 	}
 
-	// Wait for all workers to complete, then close the BatchChannel and signal done
+	// Wait for all workers to complete, then close the channel and signal done
 	go func() {
+		println("Waiting for workers to finish..")
 		bf.wg.Wait()
+		println("All workers finished")
 		close(bf.channel)
 		close(bf.done)
 	}()
