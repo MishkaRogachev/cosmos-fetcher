@@ -67,23 +67,13 @@ func main() {
 	}
 	defer resp.Body.Close()
 
-	// 2. Fetch the node status
-	rpcClient := protocol.NewRPCClient(config.NodeURL, httpClient)
-	status, err := rpcClient.Status()
-	if err != nil {
-		log.Fatalf("Error fetching node status: %v", err)
-	}
-
 	fmt.Printf("Connected to RPC endpoint url: %s\n", config.NodeURL)
 
-	// 3. Parse the sync info from the node status to get earliest and latest block heights
-	var syncInfo protocol.SyncInfo
-	syncInfoData, ok := status["result"].(map[string]interface{})["sync_info"].(map[string]interface{})
-	if !ok {
-		log.Fatalf("Error getting sync_info from node status")
-	}
-	if err := protocol.ParseSyncInfo(syncInfoData, &syncInfo); err != nil {
-		log.Fatalf("Error parsing sync_info: %v", err)
+	// 2. Fetch the node status to get earliest and latest block heights
+	rpcClient := protocol.NewRPCClient(config.NodeURL, httpClient)
+	syncInfo, err := rpcClient.SyncInfo()
+	if err != nil {
+		log.Fatalf("Error fetching node status: %v", err)
 	}
 
 	if config.ListRanges {
@@ -127,9 +117,6 @@ func main() {
 		config.MaxRetries,
 		config.RetryInterval,
 	)
-	blockStore := persistence.NewBlockStore("blocks", config.BlocksPerFile)
-
-	fetcher.StartFetchingBlocks()
 
 	// Handle graceful shutdown using channel for listening to quit signals
 	go func() {
@@ -138,6 +125,9 @@ func main() {
 		fetcher.StopFetchingBlocks() // Signal all fetchers to stop
 	}()
 
+	fetcher.StartFetchingBlocks()
+
+	blockStore := persistence.NewBlockStore("blocks", config.BlocksPerFile)
 	for block := range fetcher.GetChannel() {
 		if err := blockStore.SaveBlock(block); err != nil {
 			log.Printf("Error saving block: %v", err)

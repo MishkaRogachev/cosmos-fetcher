@@ -7,10 +7,22 @@ type SyncInfo struct {
 	LatestBlockHeight   int64 `json:"latest_block_height,string"`
 }
 
+type RPCStatus struct {
+	Result *struct {
+		SyncInfo SyncInfo `json:"sync_info"`
+	} `json:"result"`
+	Error *RPCError `json:"error"`
+}
+
 type RPCError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 	Data    string `json:"data"`
+}
+
+type BlockResponse struct {
+	Result *BlockResult `json:"result"`
+	Error  *RPCError    `json:"error"`
 }
 
 type BlockResult struct {

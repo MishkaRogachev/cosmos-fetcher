@@ -1,9 +1,7 @@
 package protocol
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"strconv"
 	"sync"
 	"time"
@@ -43,34 +41,15 @@ func NewBlockFetcher(client *RPCClient, startBlockHeight, endBlockHeight int64, 
 }
 
 func (bf *BlockFetcher) FetchBlock(height int64) (*Block, error) {
-	url := fmt.Sprintf("%s/block?height=%d", bf.client.RPCURL, height)
-	resp, err := bf.client.httpClient.Get(url)
+	result, err := bf.client.BlockHeight(height)
 	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to fetch block: %v", err)
 	}
 
-	var result struct {
-		Result BlockResult `json:"result"`
-		Error  *RPCError   `json:"error"`
-	}
-	if result.Error != nil {
-		return nil, fmt.Errorf("RPC error: %s", result.Error.Message)
-	}
+	numTransactions := len(result.Block.Data.Txs)
+	chainID := result.Block.Header.ChainID
 
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, err
-	}
-
-	numTransactions := len(result.Result.Block.Data.Txs)
-	chainID := result.Result.Block.Header.ChainID
-
-	blockHeight, err := strconv.ParseInt(result.Result.Block.Header.Height, 10, 64)
+	blockHeight, err := strconv.ParseInt(result.Block.Header.Height, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse block height: %v", err)
 	}
@@ -87,28 +66,32 @@ func (bf *BlockFetcher) FetchBlock(height int64) (*Block, error) {
 }
 
 func (bf *BlockFetcher) FetchBlockWithRetries(height int64) (*Block, error) {
-	for i := 0; i < bf.maxRetries; i++ {
-		block, err := bf.FetchBlock(height)
-		if err == nil {
-			return block, nil
-		}
+	retries := 0
 
-		fmt.Printf("Error fetching block at height %d\n", height)
+	for {
+		select {
+		case <-bf.quit:
+			return nil, fmt.Errorf("fetching cancelled for block at height %d", height)
+		default:
+			block, err := bf.FetchBlock(height)
+			if err == nil {
+				return block, nil
+			}
 
-		if i < bf.maxRetries-1 {
-			fmt.Printf("Retrying in %d milliseconds...\n", bf.retryInterval)
+			if retries >= bf.maxRetries {
+				return nil, fmt.Errorf("failed to fetch block at height %d after %d retries", height, bf.maxRetries)
+			}
+
+			fmt.Printf("Error fetching block at height %d, retry %d/%d\n", height, retries+1, bf.maxRetries)
+			retries++
 			time.Sleep(time.Duration(bf.retryInterval) * time.Millisecond)
 		}
 	}
-
-	return nil, fmt.Errorf("failed to fetch block at height %d after %d retries", height, bf.maxRetries)
 }
 
 func (bf *BlockFetcher) fetchBlocksForWorkerID(workerID int) {
 	// Notify that this worker is done when the function returns
 	defer bf.wg.Done()
-
-	fmt.Println("Worker", workerID, "starts..")
 
 	for cursor := bf.startBlockHeight + int64(workerID); cursor <= bf.endBlockHeight; cursor += int64(bf.numWorkers) {
 		select {
@@ -130,6 +113,8 @@ func (bf *BlockFetcher) fetchBlocksForWorkerID(workerID int) {
 }
 
 func (bf *BlockFetcher) StartFetchingBlocks() {
+	fmt.Println("Starting", bf.numWorkers, "workers..")
+
 	for i := 0; i < bf.numWorkers; i++ {
 		bf.wg.Add(1)
 		go bf.fetchBlocksForWorkerID(i)
@@ -137,7 +122,6 @@ func (bf *BlockFetcher) StartFetchingBlocks() {
 
 	// Wait for all workers to complete, then close the channel and signal done
 	go func() {
-		println("Waiting for workers to finish..")
 		bf.wg.Wait()
 		println("All workers finished")
 		close(bf.channel)
