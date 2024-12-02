@@ -84,6 +84,14 @@ func main() {
 	// 4. Set default block range if not provided
 	startHeight := config.StartHeight
 	endHeight := config.EndHeight
+
+	if startHeight < syncInfo.EarliestBlockHeight {
+		if startHeight != 0 {
+			fmt.Printf("Start height is earlier than the earliest block height, setting to earliest block height (%d)\n", syncInfo.EarliestBlockHeight)
+		}
+		startHeight = syncInfo.EarliestBlockHeight
+	}
+
 	if startHeight > endHeight {
 		log.Fatalf("Invalid block range: start height is later than end height")
 		return
@@ -93,12 +101,6 @@ func main() {
 		return
 	}
 
-	if startHeight < syncInfo.EarliestBlockHeight {
-		if startHeight != 0 {
-			fmt.Printf("Start height is earlier than the earliest block height, setting to earliest block height (%d)", syncInfo.EarliestBlockHeight)
-		}
-		startHeight = syncInfo.EarliestBlockHeight
-	}
 	if endHeight == 0 || endHeight > syncInfo.LatestBlockHeight {
 		if endHeight != 0 {
 			fmt.Printf("End height is later than the latest block height, setting to latest block height (%d)\n", syncInfo.LatestBlockHeight)

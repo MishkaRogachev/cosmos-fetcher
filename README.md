@@ -17,20 +17,30 @@
 
 1. List the available block ranges and exit
 ```
-go run cmd/main.go -list-ranges  -node-url https://rpc.provider-sentry-01.ics-testnet.polypore.xyz
+go run cmd/main.go -list-ranges -node-url https://rpc.testcosmos.directory/cosmosicsprovidertestnet
 ```
 
 2. Crop by earliest block height
 ```
-go run cmd/main.go -start-height 4000000 -end-height 4285100  -node-url https://rpc.provider-sentry-01.ics-testnet.polypore.xyz
+go run cmd/main.go -start-height 4000000 -end-height 4285100 -node-url https://rpc.provider-sentry-01.ics-testnet.polypore.xyz
 ```
 
 3. Crop by latest block height
 ```
-go run cmd/main.go -start-height 9372600 -end-height 9999999  -node-url https://rpc.provider-sentry-01.ics-testnet.polypore.xyz
+go run cmd/main.go -start-height 9372600 -end-height 9999999 -node-url https://rpc.provider-sentry-01.ics-testnet.polypore.xyz
 ```
 
 4. Configure number of workers
 ```
 go run cmd/main.go -parallelism 20 -node-url https://rpc.provider-sentry-01.ics-testnet.polypore.xyz
+```
+
+5. Configure retries
+```
+go run cmd/main.go -max-retries 5 -retry-interval 100 -start-height 9449000 -end-height 9449500 -node-url https://rpc.testcosmos.directory/cosmosicsprovidertestnet
+```
+
+6. Configure blocks per file
+```
+go run cmd/main.go -file-blocks 100 -start-height 23253000 -end-height 23254000 -node-url https://cosmos-rpc.publicnode.com:443
 ```
